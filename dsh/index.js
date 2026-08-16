@@ -41,11 +41,11 @@ const CAPTURE_TIMEOUT_MS = 600_000 // region mode waits on the user
 // defaulting to en. The browser half resolves its own from the document lang.
 const UI = {
   en: {
-    bannerText: 'Click the desktop background to capture · drag windows to arrange · Esc to cancel',
+    bannerText: 'Click the desktop background to capture · drag windows to arrange',
     bannerHint: 'Esc to cancel',
   },
   zh: {
-    bannerText: '点击桌面空白处开始截图 · 点击窗口可排版 · Esc 取消',
+    bannerText: '点击桌面空白处开始截图 · 点击窗口可排版',
     bannerHint: 'Esc 取消',
   },
 }
@@ -233,7 +233,7 @@ $textW = [System.Windows.Forms.TextRenderer]::MeasureText($tempG, $bannerText, $
 $hintW = [System.Windows.Forms.TextRenderer]::MeasureText($tempG, $bannerHint, $hintFont).Width
 $tempG.Dispose()
 $tempBmp.Dispose()
-$bannerW = [int](28 + $textW + 22 + $hintW + 28)
+$bannerW = [int](28 + ($textW + 16) + 22 + $hintW + 28)
 $bannerH = 78
 
 # Hint pill: white rounded rect. Clickable as a fallback trigger (the hook
@@ -271,7 +271,10 @@ $bannerLabel = New-Object System.Windows.Forms.Label
 $bannerLabel.Text = $bannerText
 $bannerLabel.Font = $bannerFont
 $bannerLabel.ForeColor = [System.Drawing.Color]::FromArgb(32, 32, 32)
-$bannerLabel.SetBounds(28, 16, ($textW + 8), 46)
+# +16px slack: TextRenderer.MeasureText can under-report the rendered width by
+# a few px, which clipped the last glyph ("消" in the zh hint). The label is
+# AutoSize=false, so give it room to avoid the clip.
+$bannerLabel.SetBounds(28, 16, ($textW + 16), 46)
 $bannerLabel.AutoSize = $false
 $banner.Controls.Add($bannerLabel)
 
@@ -279,7 +282,7 @@ $hintLabel = New-Object System.Windows.Forms.Label
 $hintLabel.Text = $bannerHint
 $hintLabel.Font = $hintFont
 $hintLabel.ForeColor = [System.Drawing.Color]::FromArgb(110, 110, 110)
-$hintLabel.SetBounds((28 + $textW + 22), 18, $hintW, 42)
+$hintLabel.SetBounds((28 + $textW + 16 + 22), 18, $hintW, 42)
 $hintLabel.AutoSize = $false
 $hintLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
 $banner.Controls.Add($hintLabel)

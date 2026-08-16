@@ -752,10 +752,18 @@ export function apply(ctx, config = {}) {
   }
   // Agent-facing tool: capture + read through modlens in one call. Skipped
   // cleanly when no modlens CLI is resolvable - the capture route still works.
+  // The name is shared with @liustack/modlens, which registers the same
+  // modlens_screenshot tool; when it wins the race we degrade silently (the
+  // tool is functionally identical) instead of spamming a duplicate stack.
   if (CLI_PATH && config.tool !== false) {
     try {
       ctx.tools.register(screenshotTool('modlens_screenshot'))
     } catch (error) {
+      const msg = String(error?.message ?? error)
+      if (/already registered/i.test(msg)) {
+        // modlens already mounted an equivalent tool - nothing to do.
+        return
+      }
       console.error('[dsh-screenshot] tool skipped:', error)
     }
   }

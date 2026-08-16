@@ -1,9 +1,8 @@
 // dsh-screenshot: standalone screen-capture plugin for DeepSeek Harness.
 // Forked out of the @liustack/modlens dsh plugin (which upstream declined:
-// liustack/modlens#48). This first layer carries only the capture itself - a
-// dependency-free PowerShell CopyFromScreen script (full-screen or an
-// arrange-then-capture region overlay). The loopback route and the
-// agent-facing modlens_screenshot tool are added in later layers.
+// liustack/modlens#48). This layer exposes the capture behind a loopback-only
+// /dsh-screenshot/screenshot route for the browser hotkeys. The agent-facing
+// modlens_screenshot tool is added in a later layer.
 import { spawn } from 'node:child_process'
 
 export const name = 'dsh-screenshot'
@@ -543,4 +542,55 @@ function runCapture(scriptPath, outPath, mode, signal) {
       resolve({ code, stdout, stderr })
     })
   })
+}
+
+function registerScreenshotRoute(host) {
+  host.webServer.register({
+    name: 'dsh-screenshot',
+    kind: 'exact',
+    path: '/dsh-screenshot/screenshot',
+    handler: async (req, res) => {
+      if (req.method !== 'GET') {
+        res.writeHead(405)
+        res.end()
+        return
+      }
+      const remote = req.socket?.remoteAddress ?? ''
+      const loopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1'
+      if (!loopback) {
+        res.writeHead(403, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: 'screenshot route is loopback-only' }))
+        return
+      }
+      const mode = new URL(req.url, 'http://localhost').searchParams.get('mode') === 'region' ? 'region' : 'full'
+      try {
+        const shot = await captureScreenshot(mode)
+        if (shot.cancelled) {
+          res.writeHead(200, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ cancelled: true }))
+          return
+        }
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ path: shot.path }))
+      } catch (error) {
+        res.writeHead(500, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ error: String(error?.message ?? error) }))
+      }
+    },
+  })
+}
+
+export function apply(ctx, config = {}) {
+  // Loopback-only capture route for the browser hotkeys.
+  if (typeof ctx.inject === 'function') {
+    ctx.inject(['webServer'], (scope) => {
+      if (config.route !== false) {
+        try {
+          registerScreenshotRoute(scope)
+        } catch (error) {
+          console.error('[dsh-screenshot] route skipped:', error)
+        }
+      }
+    })
+  }
 }

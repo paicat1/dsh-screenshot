@@ -1,0 +1,49 @@
+# dsh-screenshot
+
+独立截图插件，为 DeepSeek Harness（dsh）提供屏幕捕获能力。**不是 modlens 的替代品**——它是从 @liustack/modlens 的 dsh 插件中拆分出来的独立包（该功能上游未采纳，见 [liustack/modlens#48](https://github.com/liustack/modlens/issues/48)），目的是让截图功能**不随 modlens 更新而被覆盖**。
+
+## 致谢
+
+本插件的截图能力最初是作为 [@liustack/modlens](https://github.com/liustack/modlens)（作者 Leon Liu）的 dsh 插件增强实现的。**衷心感谢原作者为 DSH 提供了识图能力**——modlens 让纯文本模型（DeepSeek/GLM）能够"看见"图片，本插件的 `modlens_screenshot` 工具正是复用 modlens 的识图管线，把"截屏 + 识图"合成一步。截图功能本身从 modlens 中拆分出来独立维护，但识图能力始终归功于 modlens 项目。
+
+## 能力
+
+- **浏览器热键**（在 dsh 网页中）：
+  - `Ctrl+Alt+S` — 区域截图（弹出选择框，鼠标左键在桌面空白处按下开始，拖拽选框，Esc 取消）
+  - `Ctrl+Shift+Alt+S` — 全屏截图（无交互，直接捕获整个虚拟桌面）
+- **Agent 工具**：`modlens_screenshot` — AI 可自主截屏并识图（若本机装有 modlens CLI）
+- 截图 PNG 保存到 `%USERPROFILE%\Downloads\modlens-screenshots\`，路径自动插入输入框
+- 激活截图后桌面保持 live，可拖动窗口排版，点桌面空白处触发——不依赖 dsh 页面
+
+## 与 modlens 的关系
+
+| 层面 | 依赖 modlens？ | 说明 |
+|---|---|---|
+| 截图动作 | **否** | 纯 PowerShell `CopyFromScreen`，零依赖 |
+| 浏览器热键 / 路径插入 | **否** | 独立路由 `/dsh-screenshot/screenshot` |
+| `modlens_screenshot` 工具读图 | **是（可选）** | 若找不到 modlens CLI，工具不注册，截图照常工作 |
+| 配合多模态模型 | 否 | 截图路径插入后，多模态模型（如 go-mimo）可直接看图，无需 modlens |
+
+## 安装（装配到 dsh profile）
+
+在 dsh profile（如 `%USERPROFILE%\.dsh\profiles\web`）中：
+
+1. 把本包加入 `package.json` 的 `dependencies`（或 pnpm workspace）
+2. 在 `package.json` 的 `dsh.profile.bundles` 中加入本包名
+3. 重启 dsh 服务并刷新页面
+
+## 配置
+
+可在 cordis 配置中传参（可选，默认全部开启）：
+
+- `route: false` — 关闭浏览器截图路由
+- `tool: false` — 关闭 `modlens_screenshot` 工具
+
+环境变量 `MODLENS_DSH_CLI` 可显式指定 modlens CLI 路径（默认探测
+`~/.dsh/profiles/{web,headless}/node_modules/@liustack/modlens/dist/main.js`）。
+
+## 背景
+
+原 modlens 的 dsh 插件集成了截图能力（本仓库 fork 的 `feat/dsh-screenshot` 分支），
+作者在 [issue #48](https://github.com/liustack/modlens/issues/48) 中标记为 not planned。
+为解耦 modlens 更新对截图功能的影响，将其拆分为本独立插件。

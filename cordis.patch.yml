@@ -1,0 +1,5 @@
+# dsh bundle layer: mount the standalone screenshot plugin (dsh/index.js via
+# the package root export).
+- insert:
+    - id: dsh-screenshot
+      name: 'dsh-screenshot'

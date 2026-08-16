@@ -1,9 +1,15 @@
 {
   "name": "dsh-screenshot",
-  "version": "0.1.0",
-  "description": "Standalone screen capture for DeepSeek Harness (dsh): browser hotkeys plus an agent-facing capture+read tool.",
+  "version": "1.0.0",
+  "description": "Standalone screen capture for DeepSeek Harness (dsh): browser hotkeys plus an agent-facing capture+read tool. Forked out of @liustack/modlens#48 (upstream declined the feature).",
   "type": "module",
   "license": "MIT",
+  "exports": {
+    ".": "./dsh/index.js",
+    "./dsh": "./dsh/index.js",
+    "./package.json": "./package.json",
+    "./client": "./dsh/client.js"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"

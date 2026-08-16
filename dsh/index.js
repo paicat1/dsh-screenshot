@@ -1,13 +1,37 @@
 // dsh-screenshot: standalone screen-capture plugin for DeepSeek Harness.
 // Forked out of the @liustack/modlens dsh plugin (which upstream declined:
-// liustack/modlens#48). This layer exposes the capture behind a loopback-only
-// /dsh-screenshot/screenshot route for the browser hotkeys. The agent-facing
-// modlens_screenshot tool is added in a later layer.
+// liustack/modlens#48). Provides the capture the browser hotkeys use and the
+// agent-facing modlens_screenshot tool. The capture itself is dependency-free
+// (PowerShell CopyFromScreen); reading the shot through modlens is optional
+// and resolved against an installed modlens CLI.
 import { spawn } from 'node:child_process'
+import { readFileSync, statSync } from 'node:fs'
+import path from 'node:path'
+
+// Resolve the modlens CLI used to read a captured shot. MODLENS_DSH_CLI wins;
+// otherwise probe the common install locations. If none is found the capture
+// route and hotkeys still work (a path is produced); only the tool's read step
+// fails, with a clear message.
+function resolveCliPath() {
+  if (process.env.MODLENS_DSH_CLI) return process.env.MODLENS_DSH_CLI
+  const homes = [process.env.USERPROFILE, process.env.HOME].filter(Boolean)
+  const profiles = ['web', 'headless']
+  for (const home of homes) {
+    for (const profile of profiles) {
+      const p = path.join(home, '.dsh', 'profiles', profile, 'node_modules', '@liustack', 'modlens', 'dist', 'main.js')
+      try { if (statSync(p).isFile()) return p } catch {}
+    }
+  }
+  return null
+}
+
+const CLI_PATH = resolveCliPath()
+const CLI_TIMEOUT_MS = 180_000
 
 export const name = 'dsh-screenshot'
 export const inject = ['tools', 'webServer']
 
+const OUTPUT_SCHEMA = JSON.parse(readFileSync(new URL('./vision-schema.json', import.meta.url), 'utf8'))
 const CAPTURE_TIMEOUT_MS = 600_000 // region mode waits on the user
 const CAPTURE_SCRIPT = `param(
     [Parameter(Mandatory=$true)][string]$OutPath,
@@ -580,6 +604,103 @@ function registerScreenshotRoute(host) {
   })
 }
 
+const screenshotTool = (toolName) => ({
+  name: toolName,
+  description:
+    "Capture this machine's screen to a PNG and read it through the modlens vision bridge, returning the same structured evidence as modlens_read_image plus the screenshot file path. Use when the user asks what is on their screen, wants a UI inspected, or asks for a screenshot. Mode 'full' captures the whole virtual desktop without interaction; mode 'region' pops an on-screen selection overlay the user must drag (blocks until they choose or press Esc). Requires a configured modlens engine (run `npx @liustack/modlens doctor` to check) and an interactive desktop session.",
+  parameters: {
+    type: 'object',
+    properties: {
+      mode: {
+        type: 'string',
+        enum: ['full', 'region'],
+        description:
+          "'full' (default) captures the whole virtual desktop; 'region' shows an overlay and asks the user to drag-select an area",
+      },
+      prompt: {
+        type: 'string',
+        description: 'Optional extra focus for the reading (e.g. "read the error message")',
+      },
+    },
+  },
+  output: {
+    schema: OUTPUT_SCHEMA,
+    render: (_args, value) => [{ type: 'text', text: renderEvidence(value) }],
+  },
+  timeoutMs: CLI_TIMEOUT_MS + CAPTURE_TIMEOUT_MS + 20_000,
+  isConcurrencySafe: () => false,
+  presentCall: (args) => ({
+    card: 'generic',
+    title: toolName,
+    kind: 'read',
+    rawInput: args,
+  }),
+  async execute(args, exec) {
+    const mode = args?.mode === 'region' ? 'region' : 'full'
+    const shot = await captureScreenshot(mode, exec.signal)
+    if (shot.cancelled) {
+      return {
+        summary: 'The screenshot was cancelled: the region selection was dismissed (Esc) with no image captured.',
+        ocr: { full_text: '', lines: [] },
+        layout: { regions: [] },
+        semantics: { scene: '', entities: [] },
+        visual: {},
+        uncertainty: ['capture cancelled'],
+      }
+    }
+    const cliArgs = [CLI_PATH, '-i', shot.path, '--timeout', String(CLI_TIMEOUT_MS)]
+    if (args?.prompt) {
+      cliArgs.push('--prompt', args.prompt)
+    }
+    const { stdout, stderr, code } = await run(process.execPath, cliArgs, exec.signal)
+    if (code !== 0) {
+      throw new Error(`modlens failed (exit ${code}): ${(stderr || stdout).trim().slice(0, 500)}`)
+    }
+    let parsed
+    try {
+      parsed = JSON.parse(stdout)
+    } catch {
+      throw new Error(`modlens produced no JSON: ${stdout.trim().slice(0, 300)}`)
+    }
+    return { ...parsed.result, screenshotPath: shot.path }
+  },
+})
+
+function run(command, args, signal) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      signal,
+      // In the packaged desktop app process.execPath is the Electron binary;
+      // this makes it behave as plain node for the spawned CLI (issue #25).
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    child.on('error', reject)
+    child.on('close', (code) => resolve({ stdout, stderr, code }))
+  })
+}
+
+function renderEvidence(value) {
+  const lines = [value.summary]
+  const text = value.ocr?.full_text?.trim()
+  if (text) {
+    lines.push('', 'Transcription:', text.length > 4000 ? `${text.slice(0, 4000)}…` : text)
+  }
+  const uncertainty = value.uncertainty ?? []
+  if (uncertainty.length > 0) {
+    lines.push('', `Uncertain: ${uncertainty.join('; ')}`)
+  }
+  return lines.join('\n')
+}
+
 export function apply(ctx, config = {}) {
   // Loopback-only capture route for the browser hotkeys.
   if (typeof ctx.inject === 'function') {
@@ -592,5 +713,14 @@ export function apply(ctx, config = {}) {
         }
       }
     })
+  }
+  // Agent-facing tool: capture + read through modlens in one call. Skipped
+  // cleanly when no modlens CLI is resolvable - the capture route still works.
+  if (CLI_PATH && config.tool !== false) {
+    try {
+      ctx.tools.register(screenshotTool('modlens_screenshot'))
+    } catch (error) {
+      console.error('[dsh-screenshot] tool skipped:', error)
+    }
   }
 }

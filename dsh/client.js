@@ -47,6 +47,30 @@ window.__ModuleLoader__.load({
       return el || null
     }
 
+    // Two short label sets, mirroring the modlens client convention: prefer
+    // the document lang (dsh sets it from the profile), fall back to the
+    // browser language, then en. No locale framework - just the strings the
+    // toast can actually show.
+    var TEXT = {
+      en: {
+        regionInserted: 'Region screenshot path inserted',
+        fullInserted: 'Full-screen screenshot path inserted',
+        hostRouteNotLoaded: 'Screenshot unavailable: restart the dsh service and refresh (host route not loaded)',
+        failed: 'Screenshot failed: ',
+      },
+      zh: {
+        regionInserted: '区域截图已插入输入框',
+        fullInserted: '全屏截图已插入输入框',
+        hostRouteNotLoaded: '截图功能未生效：请重启 dsh 服务后刷新页面（host 端路由未加载）',
+        failed: '截图失败：',
+      },
+    }
+
+    function labels() {
+      var lang = (document.documentElement.lang || navigator.language || 'en').toLowerCase()
+      return lang.indexOf('zh') === 0 ? TEXT.zh : TEXT.en
+    }
+
     // Minimal transient toast for capture feedback; styled inline so the
     // plugin stays dependency-free (no CSS module, no React).
     function toast(message, isError) {
@@ -84,15 +108,17 @@ window.__ModuleLoader__.load({
           if (body.path) {
             var target = composerTextarea() || document.activeElement
             insertText(target, `${body.path} `)
-            toast(mode === 'region' ? '区域截图已插入输入框' : '全屏截图已插入输入框')
+            var t = labels()
+            toast(mode === 'region' ? t.regionInserted : t.fullInserted)
           }
         })
         .catch((error) => {
           console.error('[dsh-screenshot] screenshot failed:', error?.message ?? error)
+          var t = labels()
           if (error && error.status === 404) {
-            toast('截图功能未生效：请重启 dsh 服务后刷新页面（host 端路由未加载）', true)
+            toast(t.hostRouteNotLoaded, true)
           } else {
-            toast(`截图失败：${error?.message ?? error}`, true)
+            toast(t.failed + (error?.message ?? error), true)
           }
         })
     }

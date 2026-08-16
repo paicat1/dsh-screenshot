@@ -33,7 +33,39 @@ export const inject = ['tools', 'webServer']
 
 const OUTPUT_SCHEMA = JSON.parse(readFileSync(new URL('./vision-schema.json', import.meta.url), 'utf8'))
 const CAPTURE_TIMEOUT_MS = 600_000 // region mode waits on the user
-const CAPTURE_SCRIPT = `param(
+
+// User-visible capture strings, as short bundles (en/zh) - the same
+// convention the modlens client uses for its labels. The host resolves the
+// locale from config.locale, then the DSH_SCREENSHOT_LANG environment
+// variable, then the Node ICU default (which follows the OS UI language),
+// defaulting to en. The browser half resolves its own from the document lang.
+const UI = {
+  en: {
+    bannerText: 'Click the desktop background to capture · drag windows to arrange · Esc to cancel',
+    bannerHint: 'Esc to cancel',
+  },
+  zh: {
+    bannerText: '点击桌面空白处开始截图 · 点击窗口可排版 · Esc 取消',
+    bannerHint: 'Esc 取消',
+  },
+}
+
+let ui = UI.en
+
+function resolveUi(config = {}) {
+  const lang = String(
+    config.locale ||
+      process.env.DSH_SCREENSHOT_LANG ||
+      (typeof Intl !== 'undefined' && typeof Intl.DateTimeFormat === 'function'
+        ? Intl.DateTimeFormat().resolvedOptions().locale
+        : '') ||
+      'en',
+  ).toLowerCase()
+  ui = lang.indexOf('zh') === 0 ? UI.zh : UI.en
+  return ui
+}
+
+const CAPTURE_SCRIPT = (ui) => `param(
     [Parameter(Mandatory=$true)][string]$OutPath,
     [string]$Mode = 'region'
 )
@@ -191,8 +223,8 @@ if ($Mode -eq 'full') {
 # overlay shows the sharp original inside the drag selection. Presses on real
 # windows pass through untouched so arranging keeps working. Esc (global
 # keyboard hook or pill) cancels; a 5-minute idle timer auto-cancels.
-$bannerText = '点击桌面空白处开始截图 · 点击窗口可排版 · Esc 取消'
-$bannerHint = 'Esc 取消'
+$bannerText = '${ui.bannerText}'
+$bannerHint = '${ui.bannerHint}'
 $bannerFont = New-Object System.Drawing.Font('Microsoft YaHei', 17)
 $hintFont = New-Object System.Drawing.Font('Microsoft YaHei', 13)
 $tempBmp = New-Object System.Drawing.Bitmap(4, 4)
@@ -509,7 +541,7 @@ async function captureScreenshot(mode, signal) {
     const outPath = join(shotsDir, `screenshot-${stamp}-${mode}.png`)
     // UTF-8 BOM: powershell.exe 5.1 reads a BOM-less .ps1 as ANSI (GBK on
     // Chinese Windows), which garbles the Chinese hint text below.
-    await writeFile(scriptPath, `\uFEFF${CAPTURE_SCRIPT}`, { mode: 0o600 })
+    await writeFile(scriptPath, `\uFEFF${CAPTURE_SCRIPT(ui)}`, { mode: 0o600 })
     const { code, stderr } = await runCapture(scriptPath, outPath, mode, signal)
     // The temp dir only ever holds the .ps1; clean it on every exit path.
     await rm(dir, { recursive: true, force: true })
@@ -702,6 +734,7 @@ function renderEvidence(value) {
 }
 
 export function apply(ctx, config = {}) {
+  resolveUi(config)
   // Loopback-only capture route for the browser hotkeys.
   if (typeof ctx.inject === 'function') {
     ctx.inject(['webServer'], (scope) => {

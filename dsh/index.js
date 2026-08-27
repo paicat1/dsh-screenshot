@@ -41,11 +41,11 @@ const CAPTURE_TIMEOUT_MS = 600_000 // region mode waits on the user
 // defaulting to en. The browser half resolves its own from the document lang.
 const UI = {
   en: {
-    bannerText: 'Click the desktop background to capture · drag windows to arrange',
+    bannerText: 'Click the desktop or this banner to capture · drag windows to arrange',
     bannerHint: 'Esc to cancel',
   },
   zh: {
-    bannerText: '点击桌面空白处开始截图 · 点击窗口可排版',
+    bannerText: '点击桌面或本横幅开始截图 · 点击窗口可排版',
     bannerHint: 'Esc 取消',
   },
 }
@@ -231,10 +231,16 @@ $hintFont = New-Object System.Drawing.Font('Microsoft YaHei', 13)
 $tempBmp = New-Object System.Drawing.Bitmap(4, 4)
 $tempG = [System.Drawing.Graphics]::FromImage($tempBmp)
 $textW = [System.Windows.Forms.TextRenderer]::MeasureText($tempG, $bannerText, $bannerFont).Width
-$hintW = [System.Windows.Forms.TextRenderer]::MeasureText($tempG, $bannerHint, $hintFont).Width
+# Split the hint into a keycap "Esc" + the rest of the text.
+$escText = 'Esc'
+$hintRest = $bannerHint
+if ($hintRest.StartsWith('Esc')) { $hintRest = $hintRest.Substring(3).TrimStart() }
+$hintW = [System.Windows.Forms.TextRenderer]::MeasureText($tempG, $hintRest, $hintFont).Width
 $tempG.Dispose()
 $tempBmp.Dispose()
-$bannerW = [int](28 + ($textW + 16) + 22 + $hintW + 28)
+$escW = 52
+$escH = 30
+$bannerW = [int](28 + ($textW + 16) + 22 + $escW + 8 + $hintW + 28)
 $bannerH = 78
 
 # Hint pill: white rounded rect. Clickable as a fallback trigger (the hook
@@ -244,7 +250,8 @@ $banner.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $banner.TopMost = $true
 $banner.ShowInTaskbar = $false
 $banner.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
-$banner.BackColor = [System.Drawing.Color]::White
+$banner.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 45)
+$banner.Opacity = 0.85
 $banner.KeyPreview = $true
 $banner.SetBounds(($screen.X + ($width - $bannerW) / 2), ($screen.Y + 16), $bannerW, $bannerH)
 
@@ -261,8 +268,8 @@ $banner.Add_Paint({
     param($sender, $e)
     $g = $e.Graphics
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $g.Clear([System.Drawing.Color]::White)
-    $border = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200, 150, 150, 150))
+    $g.Clear([System.Drawing.Color]::FromArgb(45, 45, 45))
+    $border = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(120, 120, 120))
     $border.Width = 2
     $g.DrawRectangle($border, 1, 1, $banner.Width - 3, $banner.Height - 3)
     $border.Dispose()
@@ -271,7 +278,7 @@ $banner.Add_Paint({
 $bannerLabel = New-Object System.Windows.Forms.Label
 $bannerLabel.Text = $bannerText
 $bannerLabel.Font = $bannerFont
-$bannerLabel.ForeColor = [System.Drawing.Color]::FromArgb(32, 32, 32)
+$bannerLabel.ForeColor = [System.Drawing.Color]::White
 # +16px slack: TextRenderer.MeasureText can under-report the rendered width by
 # a few px, which clipped the last glyph ("消" in the zh hint). The label is
 # AutoSize=false, so give it room to avoid the clip.
@@ -279,11 +286,42 @@ $bannerLabel.SetBounds(28, 16, ($textW + 16), 46)
 $bannerLabel.AutoSize = $false
 $banner.Controls.Add($bannerLabel)
 
+# Keycap "Esc": dark rounded chip with a light border, like a real key.
+$escKey = New-Object System.Windows.Forms.Label
+$escKey.Text = $escText
+$escKey.Font = $hintFont
+$escKey.ForeColor = [System.Drawing.Color]::White
+$escKey.BackColor = [System.Drawing.Color]::FromArgb(45, 45, 45)
+$escKey.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$escKey.SetBounds((28 + $textW + 16 + 22), 24, $escW, $escH)
+$escKey.Add_Paint({
+    param($sender, $e)
+    $g = $e.Graphics
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+    $r = New-Object System.Drawing.Rectangle(1, 1, ($escKey.Width - 2), ($escKey.Height - 2))
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $rad = 5
+    $path.AddArc($r.X, $r.Y, $rad * 2, $rad * 2, 180, 90)
+    $path.AddArc(($r.Right - $rad * 2), $r.Y, $rad * 2, $rad * 2, 270, 90)
+    $path.AddArc(($r.Right - $rad * 2), ($r.Bottom - $rad * 2), $rad * 2, $rad * 2, 0, 90)
+    $path.AddArc($r.X, ($r.Bottom - $rad * 2), $rad * 2, $rad * 2, 90, 90)
+    $path.CloseFigure()
+    $g.FillPath((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(60, 60, 60))), $path)
+    $g.DrawPath((New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200, 200, 200), 1)), $path)
+    $sf = New-Object System.Drawing.StringFormat
+    $sf.Alignment = [System.Drawing.StringAlignment]::Center
+    $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
+    $g.DrawString($escKey.Text, $escKey.Font, (New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)), [System.Drawing.RectangleF]$r, $sf)
+    $path.Dispose()
+    $sf.Dispose()
+})
+$banner.Controls.Add($escKey)
+
 $hintLabel = New-Object System.Windows.Forms.Label
-$hintLabel.Text = $bannerHint
+$hintLabel.Text = $hintRest
 $hintLabel.Font = $hintFont
-$hintLabel.ForeColor = [System.Drawing.Color]::FromArgb(110, 110, 110)
-$hintLabel.SetBounds((28 + $textW + 16 + 22), 18, $hintW, 42)
+$hintLabel.ForeColor = [System.Drawing.Color]::FromArgb(200, 200, 200)
+$hintLabel.SetBounds((28 + $textW + 16 + 22 + $escW + 8), 18, $hintW, 42)
 $hintLabel.AutoSize = $false
 $hintLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleLeft
 $banner.Controls.Add($hintLabel)

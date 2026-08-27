@@ -210,6 +210,7 @@ if ($Mode -eq 'full') {
         exit 1
     }
     $bmp.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
     $g.Dispose()
     $bmp.Dispose()
     exit 0
@@ -481,6 +482,7 @@ $result = $form.ShowDialog()
 if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $null -ne $script:selection -and $script:selection.Width -ge 3 -and $script:selection.Height -ge 3) {
     $crop = $bmp.Clone($script:selection, $bmp.PixelFormat)
     $crop.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+    try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
     $crop.Dispose()
     $g.Dispose()
     $bmp.Dispose()

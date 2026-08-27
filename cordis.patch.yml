@@ -2,4 +2,4 @@
 # the package root export).
 - insert:
     - id: dsh-screenshot
-      name: 'dsh-screenshot'
+      name: '@paicat1/dsh-screenshot'

@@ -364,23 +364,6 @@ try {
 }
 
 $script:blurFull = $null
-try {
-    $blurW = [Math]::Max(1, [int]($width / 12))
-    $blurH = [Math]::Max(1, [int]($height / 12))
-    $blurSmall = New-Object System.Drawing.Bitmap($blurW, $blurH)
-    $blurG = [System.Drawing.Graphics]::FromImage($blurSmall)
-    $blurG.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $blurG.DrawImage($bmp, 0, 0, $blurW, $blurH)
-    $blurG.Dispose()
-    $script:blurFull = New-Object System.Drawing.Bitmap($width, $height)
-    $upG = [System.Drawing.Graphics]::FromImage($script:blurFull)
-    $upG.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $upG.DrawImage($blurSmall, 0, 0, $width, $height)
-    $upG.Dispose()
-    $blurSmall.Dispose()
-} catch {
-    $script:blurFull = $null
-}
 
 # Full-screen selection overlay: frosted backdrop, sharp original inside the
 # drag selection.
@@ -403,24 +386,18 @@ $script:drawing = $false
 $form.Add_Paint({
     param($sender, $e)
     $gfx = $e.Graphics
-    if ($null -ne $script:blurFull) {
-        $gfx.DrawImage($script:blurFull, 0, 0, $width, $height)
-    } else {
-        $gfx.DrawImage($bmp, 0, 0, $width, $height)
-    }
+    # Sharp original, dimmed full-screen (no blur): the whole screen stays
+    # readable while the selection reveals a clear window inside it.
+    $gfx.DrawImage($bmp, 0, 0, $width, $height)
+    $dim = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(105, 0, 0, 0))
+    $gfx.FillRectangle($dim, 0, 0, $width, $height)
+    $dim.Dispose()
     $sel = $script:selection
     if ($null -ne $sel -and $sel.Width -gt 0 -and $sel.Height -gt 0) {
-        # sharp original inside the selection
+        # sharp original inside the selection (covers the dim)
         $gfx.SetClip($sel)
         $gfx.DrawImage($bmp, 0, 0, $width, $height)
         $gfx.ResetClip()
-        # dim outside the selection
-        $dim = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(130, 0, 0, 0))
-        $gfx.FillRectangle($dim, 0, 0, $width, $sel.Y)
-        $gfx.FillRectangle($dim, 0, ($sel.Y + $sel.Height), $width, ($height - $sel.Y - $sel.Height))
-        $gfx.FillRectangle($dim, 0, $sel.Y, $sel.X, $sel.Height)
-        $gfx.FillRectangle($dim, ($sel.X + $sel.Width), $sel.Y, ($width - $sel.X - $sel.Width), $sel.Height)
-        $dim.Dispose()
         # border
         $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 0, 120, 215), 2)
         $gfx.DrawRectangle($pen, $sel)

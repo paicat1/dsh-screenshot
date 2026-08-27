@@ -12,7 +12,7 @@
 // imports from dsh client packages - the same zero-dependency stance as the
 // host half.
 window.__ModuleLoader__.load({
-  id: 'dsh-screenshot',
+  id: '@paicat1/dsh-screenshot',
   factory: (require) => {
     var module = { exports: {} }
     var exports = module.exports
@@ -143,7 +143,7 @@ window.__ModuleLoader__.load({
           () => () => {
             document.removeEventListener('keydown', onScreenshotKeyDown, true)
           },
-          'dsh-screenshot: hotkey listener',
+          '@paicat1/dsh-screenshot: hotkey listener',
         )
       }
     }

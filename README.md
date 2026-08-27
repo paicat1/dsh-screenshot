@@ -17,9 +17,9 @@
   - `Ctrl+Shift+Alt+S` — 全屏截图（无交互，直接捕获整个虚拟桌面）
 - **Agent 工具**：`modlens_screenshot` — AI 可自主截屏并识图（若本机装有 modlens CLI）
 - **Edge 风格选区**：区域截图时，全屏清晰原图 + 41% 暗化遮罩；拖动选区时选区内恢复清晰原图，选区外保持暗化——方便判断截取范围
-- **路径复制到剪贴板**：截图完成后，PNG 路径自动复制到剪贴板，可粘贴到任何支持图片的智能体（DSH、CodeBuddy、Claude Code 等）
-- 截图 PNG 保存到 `%USERPROFILE%\Downloads\modlens-screenshots\`，路径自动插入输入框
-- 激活截图后桌面保持 live，可拖动窗口排版，点桌面空白处触发——不依赖 dsh 页面
+- 截图 PNG 保存到 `%USERPROFILE%\Downloads\modlens-screenshots\`，路径自动插入 DSH 输入框
+- **路径复制到剪贴板**：截图完成后，PNG 路径会同时自动复制到剪贴板，可粘贴到任何支持图片的智能体（DSH、CodeBuddy、Claude Code 等）
+- 激活截图后桌面保持 live，可拖动窗口排版，点桌面空白处或横幅触发——不依赖 dsh 页面
 
 ## 为什么只传路径，不传图片？
 

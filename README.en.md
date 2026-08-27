@@ -17,9 +17,9 @@ The capture capability was originally implemented as an enhancement to the dsh p
   - `Ctrl+Shift+Alt+S` — full-screen capture (no interaction, captures the whole virtual desktop)
 - **Agent tool**: `modlens_screenshot` — the AI can capture and read the screen autonomously (if the modlens CLI is installed)
 - **Edge-style selection**: during region capture, the full screen stays sharp with a 41% dim overlay; while dragging, the selection reveals a clear window of the original image while the rest stays dimmed — easy to judge the capture area
-- **Path copied to clipboard**: after capture, the PNG path is automatically copied to the clipboard, ready to paste into any image-capable agent (DSH, CodeBuddy, Claude Code, etc.)
-- PNGs are saved to `%USERPROFILE%\Downloads\modlens-screenshots\` and the path is auto-inserted into the input box
-- The desktop stays live after activation — you can arrange windows and trigger capture by clicking empty desktop, without depending on the dsh page
+- PNGs are saved to `%USERPROFILE%\Downloads\modlens-screenshots\` and the path is auto-inserted into the DSH input box
+- **Path copied to clipboard**: after capture, the PNG path is also automatically copied to the clipboard, ready to paste into any image-capable agent (DSH, CodeBuddy, Claude Code, etc.)
+- The desktop stays live after activation — you can arrange windows and trigger capture by clicking empty desktop or the hint banner, without depending on the dsh page
 
 ## Why pass the path, not the image?
 

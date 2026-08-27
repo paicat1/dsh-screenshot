@@ -1,5 +1,7 @@
 # dsh-screenshot
 
+[English](README.en.md) | [中文](README.md)
+
 独立截图插件，为 DeepSeek Harness（dsh）提供屏幕捕获能力。**不是 modlens 的替代品**——它是从 @liustack/modlens 的 dsh 插件中拆分出来的独立包（该功能上游未采纳，见 [liustack/modlens#48](https://github.com/liustack/modlens/issues/48)），目的是让截图功能**不随 modlens 更新而被覆盖**。
 
 ## 使用说明

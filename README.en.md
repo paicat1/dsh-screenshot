@@ -1,5 +1,7 @@
 # dsh-screenshot
 
+[English](README.en.md) | [中文](README.md)
+
 A standalone screen capture plugin for DeepSeek Harness (dsh). **Not a replacement for modlens** — it was split out of the dsh plugin in @liustack/modlens as a standalone package (the feature was declined upstream, see [liustack/modlens#48](https://github.com/liustack/modlens/issues/48)), so the capture capability is **not overwritten by modlens updates**.
 
 ## Usage

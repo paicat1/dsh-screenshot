@@ -1,6 +1,6 @@
 {
   "name": "@paicat1/dsh-screenshot",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Standalone screen capture for DeepSeek Harness (dsh): browser hotkeys plus an agent-facing capture+read tool. Forked out of @liustack/modlens#48 (upstream declined the feature).",
   "repository": {
     "type": "git",

@@ -28,6 +28,10 @@ dsh plugin --profile web add @paicat1/dsh-screenshot
 | 浏览器热键（人） | "我想给你看这块屏幕" | 全屏 / 框选；截图后 PNG 路径自动插入 DSH 输入框，并复制到剪贴板 |
 | `modlens_screenshot` 工具（Agent） | "我自己看一下屏幕" | 模型自主调用：截屏 +（modlens 在场时）当场读出结构化内容，返回证据 + 截图路径 |
 
+| 人工操作演示 | Agent 自助调用演示 |
+|---|---|
+| ![人工操作演示](assets/demo-manual.gif) | ![Agent 自助调用演示](assets/demo-agent.gif) |
+
 ## 为什么传路径，不传图？
 
 截图保存到 `%USERPROFILE%\Downloads\modlens-screenshots\`（独立、易清理的目录），**只把 PNG 路径传给智能体**，而不是把图片本身塞进对话框或临时目录。这是刻意的设计：

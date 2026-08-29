@@ -2,36 +2,67 @@
 
 [English](README.en.md) | [中文](README.md)
 
-A standalone screen capture plugin for DeepSeek Harness (dsh). **Not a replacement for modlens** — it was split out of the dsh plugin in @liustack/modlens as a standalone package (the feature was declined upstream, see [liustack/modlens#48](https://github.com/liustack/modlens/issues/48)), so the capture capability is **not overwritten by modlens updates**.
+**Zero-dependency screen capture for DeepSeek Harness: instant full-screen shots, or stage your desktop (move/resize any window) and box-select a region — agent-callable capture, path-only delivery. Works with any vision consumer; pair with modlens (optional) for one-call structured evidence.**
 
-## Usage
+- **Lightweight** — pure PowerShell, zero dependencies, zero binary payload; capture is maintained independently and never breaks on upstream updates.
+- **Stage & shoot** — one-hotkey full-screen capture, or keep the desktop live and arrange *any* window before box-selecting a region — what you stage is what you get.
+- **Agent self-service** — the model can capture the screen on its own; with modlens (optional) installed, capture + read happen in one call, returning structured content (OCR/layout/semantics) that text-only models can consume directly.
+
+## Quick start
+
+```sh
+dsh plugin --profile web add @paicat1/dsh-screenshot
+# restart dsh web
+```
+
+- `Ctrl+Alt+S` — region capture: the desktop stays live — move/resize any window to stage the shot, then press and drag with the left mouse button on empty desktop (Esc to cancel)
+- `Ctrl+Shift+Alt+S` — full-screen capture: no interaction, captures the whole virtual desktop
+- Want the agent to screenshot on its own? Just tell it to use the `modlens_screenshot` tool.
 
 Video tutorial (Bilibili): [Using DeepSeek Harness to build a Dsh screenshot plugin for DeepSeek Harness](https://www.bilibili.com/video/BV1bF8G6oE66/)
 
-## Credits
+## Two doors: hotkey for humans, tool for agents
 
-The capture capability was originally implemented as an enhancement to the dsh plugin of [@liustack/modlens](https://github.com/liustack/modlens) (by Leon Liu). **Many thanks to the original author for giving DSH image-reading ability** — modlens lets text-only models (DeepSeek/GLM) "see" images, and this plugin's `modlens_screenshot` tool reuses the modlens pipeline to combine "capture + read" into one step. The capture half is maintained separately, but the image-reading ability always belongs to the modlens project.
-
-## Features
-
-- **Browser hotkeys** (inside the dsh web UI):
-  - `Ctrl+Alt+S` — region capture (selection overlay; press and drag with the left mouse button on empty desktop, Esc to cancel)
-  - `Ctrl+Shift+Alt+S` — full-screen capture (no interaction, captures the whole virtual desktop)
-- **Agent tool**: `modlens_screenshot` — the AI can capture and read the screen autonomously (if the modlens CLI is installed)
-- **Edge-style selection**: during region capture, the full screen stays sharp with a 41% dim overlay; while dragging, the selection reveals a clear window of the original image while the rest stays dimmed — easy to judge the capture area
-- PNGs are saved to `%USERPROFILE%\Downloads\modlens-screenshots\` and the path is auto-inserted into the DSH input box
-- **Path copied to clipboard**: after capture, the PNG path is also automatically copied to the clipboard, ready to paste into any image-capable agent (DSH, CodeBuddy, Claude Code, etc.)
-- The desktop stays live after activation — you can arrange windows and trigger capture by clicking empty desktop or the hint banner, without depending on the dsh page
+| Entry | Best for | Notes |
+|---|---|---|
+| Browser hotkey (human) | "Here's the screen I want to show you" | Full / region capture; the PNG path is auto-inserted into the DSH input box and copied to the clipboard |
+| `modlens_screenshot` tool (agent) | "Let me look at the screen myself" | Model-invoked: capture + (with modlens present) in-call structured read, returning evidence + the shot path |
 
 ## Why pass the path, not the image?
 
-Screenshots are saved to `%USERPROFILE%\Downloads\modlens-screenshots\` (a dedicated, easy-to-clean directory), and **only the PNG path is handed to the agent** — not the image itself stuffed into a chat box or temp directory. This is a deliberate design:
+Screenshots are saved to `%USERPROFILE%\Downloads\modlens-screenshots\` (a dedicated, easy-to-clean directory), and **only the PNG path is handed to the agent** — not the image stuffed into a chat box or temp directory. Deliberate design:
 
-- **No image litter**: many agent frameworks copy pasted images into their own temp/attachment directories, accumulating untrackable junk over time. Passing the path keeps the image in exactly one place (`modlens-screenshots/`); cleaning up is deleting one directory.
-- **Path is universal**: any image-capable agent (native multimodal models, or modlens-style bridges) can read an image from a path — paths are universal, image formats are not.
-- **Clean context**: a path is tens of bytes of text; an image is hundreds of KB of binary. Passing the path keeps the context clean and traceable.
+- **No image litter**: many agent frameworks copy pasted images into their own temp/attachment directories, accumulating untrackable junk. A path keeps the image in exactly one place (`modlens-screenshots/`); cleaning up is deleting one directory.
+- **Paths are universal**: any image-capable agent (native multimodal models, or modlens-style bridges) can read an image from a path — paths are universal, image formats are not.
+- **Clean context**: a path is tens of bytes of text; an image is hundreds of KB of binary. Paths keep the context clean and traceable.
 
-This design makes the "capture → agent reads image" workflow cleaner: capture once, reuse the path in any agent, and produce zero junk.
+Capture once, reuse the path in any agent, produce zero junk.
+
+## Capability split: what's the plugin's, what's modlens's
+
+| Layer | Capability | Owned by |
+|---|---|---|
+| Capture | Full / region / staged-window layout, zero-dep PowerShell | This plugin |
+| Delivery | Path-only, clipboard, dedicated save dir | This plugin |
+| Entry points | Browser hotkeys + agent-callable capture tool | This plugin |
+| Reading | OCR / layout / semantics structured evidence | modlens (optional) |
+| Consumption | Who understands the image | any multimodal model / vision bridge — agnostic |
+
+Capture and delivery are fully self-contained and work standalone; reading is an ecosystem combo — install modlens (or hand the path to any image-capable model/bridge) to unlock it. Without modlens, capture still works.
+
+## Configuration
+
+Optional cordis config (all enabled by default):
+
+- `route: false` — disable the browser capture route
+- `tool: false` — disable the `modlens_screenshot` tool
+
+`MODLENS_DSH_CLI` explicitly sets the modlens CLI path (default probe: `~/.dsh/profiles/{web,headless}/node_modules/@liustack/modlens/dist/main.js`).
+
+## Platform & License
+
+- **Platform**: Windows (relies on PowerShell `System.Drawing.CopyFromScreen`)
+- **License**: MIT
 
 ## Relationship with modlens
 
@@ -42,41 +73,8 @@ This design makes the "capture → agent reads image" workflow cleaner: capture 
 | `modlens_screenshot` tool reading | **Yes (optional)** | If the modlens CLI is missing, the tool is not registered; capture still works |
 | Multimodal models | No | After the path is inserted, multimodal models (e.g. go-mimo) can read the image directly, no modlens needed |
 
-## Installation
+## Background & credits
 
-### From npm (recommended)
+The capture capability was originally implemented as an enhancement to the dsh plugin of [@liustack/modlens](https://github.com/liustack/modlens) (by Leon Liu): the original modlens dsh plugin integrated capture (this repo's fork of the `feat/dsh-screenshot` branch), and the author marked it as not planned in [issue #48](https://github.com/liustack/modlens/issues/48). It was split into this standalone plugin to decouple capture from modlens updates.
 
-```bash
-dsh plugin --profile web add @paicat1/dsh-screenshot
-```
-
-### From the marketplace
-
-The plugin is listed in [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin) (vision category) and can be installed with one click from DSH Plugin Hub / dsh-market.
-
-### Assemble into a dsh profile (development/local)
-
-In a dsh profile (e.g. `%USERPROFILE%\.dsh\profiles\web`):
-
-1. Add this package to `package.json` `dependencies` (or pnpm workspace)
-2. Add this package name to `dsh.profile.bundles` in `package.json`
-3. Restart the dsh service and refresh the page
-
-## Configuration
-
-Optional cordis config (all enabled by default):
-
-- `route: false` — disable the browser capture route
-- `tool: false` — disable the `modlens_screenshot` tool
-
-The `MODLENS_DSH_CLI` environment variable explicitly sets the modlens CLI path (default probe:
-`~/.dsh/profiles/{web,headless}/node_modules/@liustack/modlens/dist/main.js`).
-
-## Platform & License
-
-- **Platform**: Windows (relies on PowerShell `System.Drawing.CopyFromScreen`)
-- **License**: MIT
-
-## Background
-
-The original modlens dsh plugin integrated capture (this repo's fork of the `feat/dsh-screenshot` branch); the author marked it as not planned in [issue #48](https://github.com/liustack/modlens/issues/48). It was split into this standalone plugin to decouple capture from modlens updates.
+**Many thanks to the original author for giving DSH image-reading ability** — modlens lets text-only models (DeepSeek/GLM) "see" images, and this plugin's `modlens_screenshot` tool reuses the modlens pipeline to combine "capture + read" into one step. The capture half is maintained separately, but the image-reading ability always belongs to the modlens project.

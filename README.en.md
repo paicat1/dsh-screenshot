@@ -56,7 +56,7 @@ Capture and delivery are fully self-contained and work standalone; reading is an
 
 **Why can window-snap capture "occluded" windows?** On hover the plugin enumerates the on-screen windows and outlines the one under the cursor; on click it uses `PrintWindow` to ask the window to **render itself** — the shot is the window's own content, not the on-screen pixels, so being covered by other windows or wrapped in a DWM shadow doesn't matter. It then crops to the DWM content bounds to drop the shadow, for clean edges.
 
-**Known exception: a standalone PowerShell window** does not respond to `PrintWindow`, so when occluded it falls back to the visible on-screen pixels (including whatever covers it). Bring it to the foreground and click, or just drag-select over it. **All other windows (including cmd and other console windows) capture normally.**
+**Known exception: a standalone PowerShell window**: its console (conhost) implementation **does not respond to `PrintWindow`**, and **does not render its GDI surface while covered** — both see-through-occlusion paths are unavailable, so it falls back to the visible on-screen pixels (including whatever covers it). Bring it to the foreground and click, or just drag-select over it. **All other windows (including cmd and other console windows) capture normally.**
 
 ## Configuration
 

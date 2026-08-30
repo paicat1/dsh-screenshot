@@ -119,11 +119,23 @@ public static class MLHooks {
     public const uint SRCCOPY = 0x00CC0020;
     public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
     // Content bounds excluding the DWM shadow; falls back to GetWindowRect.
+    // Some consoles report DWM bounds in DPI-virtualized coords (1.5x the
+    // physical rect), which corrupts the snap hit-test and hover outline.
+    // Content bounds must never exceed the window frame, so reject any DWM
+    // rect that spills outside GetWindowRect and use the physical frame.
     public static bool GetWindowContentBounds(IntPtr hwnd, out RECT rect) {
         rect = new RECT();
+        RECT gwr = new RECT();
+        bool hasGwr = GetWindowRect(hwnd, out gwr);
         if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out rect, System.Runtime.InteropServices.Marshal.SizeOf(typeof(RECT))) == 0
-            && rect.Right > rect.Left && rect.Bottom > rect.Top) return true;
-        return GetWindowRect(hwnd, out rect);
+            && rect.Right > rect.Left && rect.Bottom > rect.Top) {
+            if (hasGwr && (rect.Left < gwr.Left || rect.Top < gwr.Top || rect.Right > gwr.Right || rect.Bottom > gwr.Bottom)) {
+                rect = gwr;
+            }
+            return true;
+        }
+        if (hasGwr) { rect = gwr; return true; }
+        return false;
     }
     public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
     public const uint GA_PARENT = 1;
@@ -737,24 +749,60 @@ if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $null -ne $script:s
             $winBmp = Capture-WindowPrint $script:hoverHwnd $gwrW $gwrH
             if ($null -ne $winBmp -and (Test-BlankBitmap $winBmp)) {
                 # PrintWindow rendered blank (console / some GPU windows don't
-                # implement WM_PRINT): fall back to grabbing the window's own
-                # device context, which still carries its content.
+                # implement WM_PRINT): drop it and fall through to BitBlt.
                 $winBmp.Dispose()
+                $winBmp = $null
+            }
+            if ($null -eq $winBmp) {
+                # PrintWindow failed outright (returns $null, e.g. some conhost
+                # consoles) or rendered blank: BitBlt the window's own device
+                # context, which still carries its content.
                 $winBmp = Capture-WindowBitBlt $script:hoverHwnd $gwrW $gwrH
             }
             if ($null -ne $winBmp -and -not (Test-BlankBitmap $winBmp)) {
-                $cbRect = New-Object System.Drawing.Rectangle(($cr.Left - $gr.Left), ($cr.Top - $gr.Top), ($cr.Right - $cr.Left), ($cr.Bottom - $cr.Top))
-                $crop = $winBmp.Clone($cbRect, $winBmp.PixelFormat)
-                $crop.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
-                try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
-                $crop.Dispose()
+                # Crop to the DWM content rect, CLAMPED to the GWR bitmap. Some
+                # consoles report DWM bounds in DPI-virtualized coords (1.5x the
+                # physical rect), which would overflow the bitmap and throw
+                # "Out of memory" from Clone. Only clip when the content rect
+                # actually sits INSIDE the outer rect (the shadow-inset case);
+                # otherwise fall back to the full outer rect (consoles have no
+                # shadow to drop, and its content fills the whole frame).
+                $cbInside = ($cr.Left -ge $gr.Left) -and ($cr.Top -ge $gr.Top) -and ($cr.Right -le $gr.Right) -and ($cr.Bottom -le $gr.Bottom)
+                if ($cbInside) {
+                    $cropX = $cr.Left - $gr.Left
+                    $cropY = $cr.Top - $gr.Top
+                    $cropW = $cr.Right - $cr.Left
+                    $cropH = $cr.Bottom - $cr.Top
+                } else {
+                    $cropX = 0; $cropY = 0; $cropW = $gwrW; $cropH = $gwrH
+                }
+                if ($cropW -gt 0 -and $cropH -gt 0) {
+                    $cbRect = New-Object System.Drawing.Rectangle($cropX, $cropY, $cropW, $cropH)
+                    $crop = $winBmp.Clone($cbRect, $winBmp.PixelFormat)
+                    $crop.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+                    try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
+                    $crop.Dispose()
+                    $saved = $true
+                }
                 $winBmp.Dispose()
-                $saved = $true
             } elseif ($null -ne $winBmp) {
                 $winBmp.Dispose()
             }
-            # Both capture paths blank (rare): bail out as cancelled rather than
-            # emit a partially-occluded composite or a full-desktop garbage shot.
+            # Both PrintWindow and BitBlt came back blank (consoles don't render
+            # their GDI surface when not foreground, so BitBlt grabs nothing):
+            # fall back to the PRE-captured screen pixels of the hovered window.
+            # The full-screen snapshot was taken right after the trigger and
+            # before the overlay, when the snapped window was still live on
+            # screen, so this yields the visible content - same as a drag-select.
+            if (-not $saved -and $null -ne $script:hoverRect -and $script:hoverRect.Width -gt 0 -and $script:hoverRect.Height -gt 0) {
+                try {
+                    $crop = $bmp.Clone($script:hoverRect, $bmp.PixelFormat)
+                    $crop.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+                    try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
+                    $crop.Dispose()
+                    $saved = $true
+                } catch { }
+            }
         }
     } else {
         # Drag-select path: crop the captured pixels (visible content).

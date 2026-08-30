@@ -2,10 +2,10 @@
 
 [English](README.en.md) | [中文](README.md)
 
-**Zero-dependency screen capture for DeepSeek Harness: instant full-screen shots, or stage your desktop (move/resize any window) and box-select a region — agent-callable capture, path-only delivery. Works with any vision consumer; pair with modlens (optional) for one-call structured evidence.**
+**Zero-dependency screen capture for DeepSeek Harness**: **Lightweight**: zero deps, zero binaries; **Stage & shoot**: one-click full screen, window layout, hover-snap capture of occluded windows; **Agent self-service**: path-only delivery; paths are universal, pair with modlens (optional) for one-call structured evidence.
 
 - **Lightweight** — pure PowerShell, zero dependencies, zero binary payload; capture is maintained independently and never breaks on upstream updates.
-- **Stage & shoot** — one-hotkey full-screen capture, or keep the desktop live and arrange *any* window before box-selecting a region — what you stage is what you get.
+- **Stage & shoot** — one-hotkey full-screen capture, or keep the desktop live and arrange *any* window before box-selecting a region; **hover any window and it glows with a snap outline — one click captures that window's full content, even when occluded** — what you stage is what you get.
 - **Agent self-service** — the model can capture the screen on its own; with modlens (optional) installed, capture + read happen in one call, returning structured content (OCR/layout/semantics) that text-only models can consume directly.
 
 ## Quick start
@@ -15,7 +15,7 @@ dsh plugin --profile web add @paicat1/dsh-screenshot
 # restart dsh web
 ```
 
-- `Ctrl+Alt+S` — region capture: the desktop stays live — move/resize any window to stage the shot, then press and drag with the left mouse button on empty desktop (Esc to cancel)
+- `Ctrl+Alt+S` — capture: once armed, **click the desktop = full screen**; **hover a window = snap outline, one click captures that window's full content (even when occluded)**; **drag = free region** (Esc to cancel)
 - `Ctrl+Shift+Alt+S` — full-screen capture: no interaction, captures the whole virtual desktop
 - Want the agent to screenshot on its own? Just tell it to use the `modlens_screenshot` tool.
 
@@ -46,13 +46,15 @@ Capture once, reuse the path in any agent, produce zero junk.
 
 | Layer | Capability | Owned by |
 |---|---|---|
-| Capture | Full / region / staged-window layout, zero-dep PowerShell | This plugin |
+| Capture | Full / region / **window-snap capture** / staged-window layout, zero-dep PowerShell | This plugin |
 | Delivery | Path-only, clipboard, dedicated save dir | This plugin |
 | Entry points | Browser hotkeys + agent-callable capture tool | This plugin |
 | Reading | OCR / layout / semantics structured evidence | modlens (optional) |
 | Consumption | Who understands the image | any multimodal model / vision bridge — agnostic |
 
 Capture and delivery are fully self-contained and work standalone; reading is an ecosystem combo — install modlens (or hand the path to any image-capable model/bridge) to unlock it. Without modlens, capture still works.
+
+**Why can window-snap capture "occluded" windows?** On hover the plugin enumerates the on-screen windows and outlines the one under the cursor; on click it uses `PrintWindow` to ask the window to **render itself** — the shot is the window's own content, not the on-screen pixels, so being covered by other windows or wrapped in a DWM shadow doesn't matter. It then crops to the DWM content bounds to drop the shadow, for clean edges.
 
 ## Configuration
 

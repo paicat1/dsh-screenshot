@@ -59,8 +59,8 @@ window.__ModuleLoader__.load({
         failed: 'Screenshot failed: ',
       },
       zh: {
-        regionInserted: '区域截图已插入输入框',
-        fullInserted: '全屏截图已插入输入框',
+        regionInserted: '区域截图路径已插入输入框',
+        fullInserted: '全屏截图路径已插入输入框',
         hostRouteNotLoaded: '截图功能未生效：请重启 dsh 服务后刷新页面（host 端路由未加载）',
         failed: '截图失败：',
       },
@@ -78,10 +78,11 @@ window.__ModuleLoader__.load({
       div.textContent = message
       div.style.cssText =
         'position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:2147483647;' +
-        'padding:8px 14px;border-radius:8px;font:12px/1.5 system-ui,sans-serif;color:#fff;' +
+        'padding:12px 20px;border-radius:12px;font:16px/1.5 system-ui,sans-serif;color:#fff;' +
         'background:' +
-        (isError ? 'rgba(200,50,50,.95)' : 'rgba(20,20,20,.92)') +
-        ';box-shadow:0 2px 12px rgba(0,0,0,.35);pointer-events:none;'
+        (isError ? 'rgba(200,50,50,.95)' : 'rgba(45,45,45,.85)') +
+        ';border:1px solid rgba(120,120,120,.8);' +
+        'box-shadow:0 2px 12px rgba(0,0,0,.35);pointer-events:none;'
       document.body.appendChild(div)
       setTimeout(() => {
         if (div.parentNode) div.parentNode.removeChild(div)

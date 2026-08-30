@@ -30,7 +30,7 @@ dsh plugin --profile web add @paicat1/dsh-screenshot
 
 | 人工操作演示 | Agent 自助调用演示 |
 |---|---|
-| ![人工操作演示](assets/demo-manual.gif) | ![Agent 自助调用演示](assets/demo-agent.gif) |
+| ![人工操作演示](assets/demo-manual.gif) | ![Agent 自助调用演示](assets/demo-agent.gif) | ![窗口吸附演示](assets/demo-window-snap.gif) |
 
 ## 为什么传路径，不传图？
 

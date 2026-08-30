@@ -30,7 +30,7 @@ Video tutorial (Bilibili): [Using DeepSeek Harness to build a Dsh screenshot plu
 
 | Manual capture demo | Agent self-capture demo |
 |---|---|
-| ![Manual capture demo](assets/demo-manual.gif) | ![Agent self-capture demo](assets/demo-agent.gif) |
+| ![Manual capture demo](assets/demo-manual.gif) | ![Agent self-capture demo](assets/demo-agent.gif) | ![Window-snap demo](assets/demo-window-snap.gif) |
 
 ## Why pass the path, not the image?
 

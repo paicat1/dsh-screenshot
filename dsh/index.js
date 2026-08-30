@@ -104,7 +104,32 @@ public static class MLHooks {
     [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern bool GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
     [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hwnd, uint gaFlags);
     [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey);
+    [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll", EntryPoint="GetWindowLongPtr")] public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll", CharSet=CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, uint nFlags);
+    [DllImport("user32.dll")] public static extern IntPtr GetWindowDC(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+    [DllImport("gdi32.dll")] public static extern bool BitBlt(IntPtr hdcDest, int xDest, int yDest, int wDest, int hDest, IntPtr hdcSrc, int xSrc, int ySrc, uint rop);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    public const uint PW_RENDERFULLCONTENT = 2;
+    public const uint SRCCOPY = 0x00CC0020;
+    public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    // Content bounds excluding the DWM shadow; falls back to GetWindowRect.
+    public static bool GetWindowContentBounds(IntPtr hwnd, out RECT rect) {
+        rect = new RECT();
+        if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out rect, System.Runtime.InteropServices.Marshal.SizeOf(typeof(RECT))) == 0
+            && rect.Right > rect.Left && rect.Bottom > rect.Top) return true;
+        return GetWindowRect(hwnd, out rect);
+    }
+    public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
     public const uint GA_PARENT = 1;
+    public const uint GA_ROOT = 2;
+    public const int GWL_EXSTYLE = -20;
+    public const int WS_EX_TOOLWINDOW = 0x00000080;
     public const int WH_MOUSE_LL = 14;
     public const int WH_KEYBOARD_LL = 13;
     public const int WM_LBUTTONDOWN = 0x0201;
@@ -421,6 +446,37 @@ try {
 $script:startPoint = $null
 $script:selection = $null
 $script:drawing = $false
+$script:windowSnap = $false
+$script:hoverRect = $null
+$script:hoverHwnd = [IntPtr]::Zero
+$script:ptX = 0
+$script:ptY = 0
+$script:windowHwndAtPoint = [IntPtr]::Zero
+$script:windowRectAtPoint = $null
+$script:windowOuterRect = New-Object MLHooks+RECT
+# Window-snap enumeration callback: the topmost visible non-desktop window
+# under the cursor (the overlay itself is excluded by handle). EnumWindows
+# walks top-to-bottom in Z-order, so the first hit is the front-most window.
+$script:windowEnumCb = [MLHooks+EnumWindowsProc]{
+    param($hwnd, $lParam)
+    if (-not [MLHooks]::IsWindowVisible($hwnd)) { return $true }
+    $ex = [MLHooks]::GetWindowLongPtr($hwnd, [MLHooks]::GWL_EXSTYLE)
+    if (($ex.ToInt64() -band [MLHooks]::WS_EX_TOOLWINDOW) -ne 0) { return $true }
+    if ($hwnd -eq $form.Handle) { return $true }
+    $cls = [MLHooks]::ClassOf($hwnd)
+    if ($cls -eq 'Progman' -or $cls -eq 'WorkerW' -or $cls -eq 'SHELLDLL_DefView') { return $true }
+    $r = New-Object MLHooks+RECT
+    # Content bounds excluding the window shadow (falls back to GetWindowRect),
+    # so the snap outline and the PrintWindow bitmap hug the real window.
+    if (-not [MLHooks]::GetWindowContentBounds($hwnd, [ref]$r)) { return $true }
+    if ($script:ptX -ge $r.Left -and $script:ptX -lt $r.Right -and $script:ptY -ge $r.Top -and $script:ptY -lt $r.Bottom) {
+        $script:windowHwndAtPoint = $hwnd
+        $script:windowRectAtPoint = $r
+        [MLHooks]::GetWindowRect($hwnd, [ref]$script:windowOuterRect) | Out-Null
+        return $false
+    }
+    return $true
+}
 
 $form.Add_Paint({
     param($sender, $e)
@@ -452,6 +508,30 @@ $form.Add_Paint({
         $gfx.DrawString($label, $font, (New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)), $bx + 4, $by + 2)
         $font.Dispose()
     }
+    # Window-snap highlight: hovering over a real window reveals it sharp
+    # inside the dimmed screen and outlines it; a click captures that window.
+    $hr = $script:hoverRect
+    if ($null -ne $hr -and -not $script:drawing -and $hr.Width -gt 0 -and $hr.Height -gt 0) {
+        $gfx.SetClip($hr)
+        $gfx.DrawImage($bmp, 0, 0, $width, $height)
+        $gfx.ResetClip()
+        $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(255, 0, 120, 215), 2)
+        $gfx.DrawRectangle($pen, $hr)
+        $pen.Dispose()
+        $sb = New-Object System.Text.StringBuilder(256)
+        [MLHooks]::GetWindowText($script:hoverHwnd, $sb, 256) | Out-Null
+        $title = $sb.ToString()
+        if ($title) {
+            $tfont = New-Object System.Drawing.Font('Segoe UI', 11, [System.Drawing.FontStyle]::Bold)
+            $tsize = $gfx.MeasureString($title, $tfont)
+            $tbx = $hr.X + 2
+            $tby = $hr.Y - $tsize.Height - 4
+            if ($tby -lt 0) { $tby = $hr.Y + 2 }
+            $gfx.FillRectangle((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(220, 0, 120, 215))), $tbx, $tby, $tsize.Width + 8, $tsize.Height + 4)
+            $gfx.DrawString($title, $tfont, (New-Object System.Drawing.SolidBrush([System.Drawing.Color]::White)), $tbx + 4, $tby + 2)
+            $tfont.Dispose()
+        }
+    }
 })
 $form.Add_MouseDown({
     param($sender, $e)
@@ -473,6 +553,26 @@ $form.Add_MouseMove({
         $h = [Math]::Abs($script:startPoint.Y - $e.Y)
         $script:selection = New-Object System.Drawing.Rectangle($x, $y, $w, $h)
         $form.Invalidate()
+    } else {
+        # Window-snap: outline the topmost visible window under the cursor.
+        $script:ptX = $e.X + $screen.X
+        $script:ptY = $e.Y + $screen.Y
+        $script:windowHwndAtPoint = [IntPtr]::Zero
+        $script:windowRectAtPoint = $null
+        [MLHooks]::EnumWindows($script:windowEnumCb, [IntPtr]::Zero) | Out-Null
+        if ($null -ne $script:windowRectAtPoint) {
+            $r = $script:windowRectAtPoint
+            $hr = New-Object System.Drawing.Rectangle(($r.Left - $screen.X), ($r.Top - $screen.Y), ($r.Right - $r.Left), ($r.Bottom - $r.Top))
+            if ($null -eq $script:hoverRect -or -not $hr.Equals($script:hoverRect)) {
+                $script:hoverRect = $hr
+                $script:hoverHwnd = $script:windowHwndAtPoint
+                $form.Invalidate()
+            }
+        } elseif ($null -ne $script:hoverRect) {
+            $script:hoverRect = $null
+            $script:hoverHwnd = [IntPtr]::Zero
+            $form.Invalidate()
+        }
     }
 })
 $form.Add_MouseUp({
@@ -485,12 +585,35 @@ $form.Add_MouseUp({
         $h = [Math]::Abs($script:startPoint.Y - $e.Y)
         $script:selection = New-Object System.Drawing.Rectangle($x, $y, $w, $h)
         if ($w -ge 3 -and $h -ge 3) {
+            # Drag-select: always capture the user's rectangle (may span the
+            # whole desktop). Never let a window snap hijack a drag.
+            $script:windowSnap = $false
+            $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
+            $form.Close()
+        } elseif ($null -ne $script:hoverRect -and $script:hoverRect.Width -gt 0 -and $script:hoverRect.Height -gt 0) {
+            # A click on a snapped window captures that window - UNLESS it
+            # spans nearly the whole screen (a maximized/full-screen app, e.g.
+            # the IDE itself). That is the "click the desktop for a
+            # full-screen capture" case: grab the whole desktop instead of
+            # relying on PrintWindow of a full-screen window.
+            $hoverArea = [double]$script:hoverRect.Width * $script:hoverRect.Height
+            $screenArea = [double]$width * $height
+            if ($hoverArea -ge ($screenArea * 0.9)) {
+                $script:selection = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
+                $script:windowSnap = $false
+            } else {
+                $script:selection = $script:hoverRect
+                $script:windowSnap = $true
+            }
             $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
             $form.Close()
         } else {
-            $script:startPoint = $null
-            $script:selection = $null
-            $form.Invalidate()
+            # A click on the desktop background (no window snapped, no drag)
+            # captures the whole desktop: the "full screen" quick path.
+            $script:selection = New-Object System.Drawing.Rectangle(0, 0, $width, $height)
+            $script:windowSnap = $false
+            $form.DialogResult = [System.Windows.Forms.DialogResult]::OK
+            $form.Close()
         }
     }
 })
@@ -505,28 +628,156 @@ $form.Add_Shown({
     param($sender, $e)
     try { [MLTop]::SetWindowPos($form.Handle, (New-Object IntPtr -ArgumentList (-1)), 0, 0, 0, 0, 0x0001 -bor 0x0002) | Out-Null } catch { }
     $form.Activate()
-    # If the user already released (fast click before the overlay showed), do
-    # not start a drag: wait for a fresh press on the overlay instead.
+    # The user may still be holding the button when the overlay appears (a
+    # fast second click that landed before the overlay finished showing).
+    # Anchor the drag to the CURRENT cursor position, not the original
+    # trigger point - otherwise a desktop click that should capture the full
+    # screen becomes a huge start-to-click rectangle instead.
     if ([MLHooks]::LeftButtonDown()) {
-        $script:startPoint = New-Object System.Drawing.Point($cx, $cy)
-        $script:selection = New-Object System.Drawing.Rectangle($cx, $cy, 0, 0)
+        $cur = [System.Windows.Forms.Cursor]::Position
+        $local = New-Object System.Drawing.Point(($cur.X - $screen.X), ($cur.Y - $screen.Y))
+        $script:startPoint = $local
+        $script:selection = New-Object System.Drawing.Rectangle($local, (New-Object System.Drawing.Size(0, 0)))
         $script:drawing = $true
     }
     $form.Invalidate()
 })
 
+# Window capture via PrintWindow: asks the target window to render itself into
+# a fresh bitmap, so the shot is the window's own content (including its title
+# bar and borders), not whatever occludes it on screen. PW_RENDERFULLCONTENT
+# (2) makes UWP / DirectComposition windows render their full content.
+# Returns $null on failure; Test-BlankBitmap guards against a blank result
+# (some GPU-rendered windows return a white/black buffer).
+function Capture-WindowPrint {
+    param([IntPtr]$Hwnd, [int]$W, [int]$H)
+    if ($Hwnd -eq [IntPtr]::Zero -or $W -le 0 -or $H -le 0) { return $null }
+    $bmp = New-Object System.Drawing.Bitmap($W, $H)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $hdc = $g.GetHdc()
+    $ok = $false
+    try {
+        $ok = [MLHooks]::PrintWindow($Hwnd, $hdc, [MLHooks]::PW_RENDERFULLCONTENT)
+    } finally {
+        $g.ReleaseHdc($hdc)
+        $g.Dispose()
+    }
+    if (-not $ok) { $bmp.Dispose(); return $null }
+    return $bmp
+}
+
+# BitBlt fallback for windows PrintWindow cannot render (console windows and
+# some GPU-composited windows don't implement WM_PRINT). Grabs the window's
+# OWN device context, so the content is the window's, not whatever occludes it.
+# GetWindowDC returns the full window DC (including the non-client title bar),
+# whose origin is the window's top-left in screen coordinates - matching the
+# GWR-sized bitmap we create.
+function Capture-WindowBitBlt {
+    param([IntPtr]$Hwnd, [int]$W, [int]$H)
+    if ($Hwnd -eq [IntPtr]::Zero -or $W -le 0 -or $H -le 0) { return $null }
+    $bmp = New-Object System.Drawing.Bitmap($W, $H)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $hdc = $g.GetHdc()
+    $winDc = [MLHooks]::GetWindowDC($Hwnd)
+    $ok = $false
+    if ($winDc -ne [IntPtr]::Zero) {
+        $ok = [MLHooks]::BitBlt($hdc, 0, 0, $W, $H, $winDc, 0, 0, [MLHooks]::SRCCOPY)
+        [MLHooks]::ReleaseDC($Hwnd, $winDc) | Out-Null
+    }
+    $g.ReleaseHdc($hdc)
+    $g.Dispose()
+    if (-not $ok) { $bmp.Dispose(); return $null }
+    return $bmp
+}
+
+function Test-BlankBitmap {
+    param($Bmp)
+    if ($null -eq $Bmp) { return $true }
+    # Asymmetric 5x5 sampling grid: breaks the row/column alignment that
+    # makes a uniform 0.25-step grid land entirely in monospace line gaps
+    # of a console window. With non-divisor steps (0.1, 0.3, 0.5, 0.7, 0.9
+    # offset to 0.13, 0.34, 0.51, 0.72, 0.88) every cell straddles text rows
+    # AND background, so a real window is never mistaken for blank.
+    $xs = @(0.1, 0.34, 0.5, 0.72, 0.9)
+    $ys = @(0.13, 0.31, 0.51, 0.69, 0.88)
+    $pts = @()
+    foreach ($y in $ys) {
+        foreach ($x in $xs) {
+            # ,@() keeps each point as ONE array element (a bare += @(x,y) would
+            # flatten the pair into two ints and break the loop below).
+            $pts += ,@([int]($Bmp.Width * $x), [int]($Bmp.Height * $y))
+        }
+    }
+    $first = $null
+    foreach ($p in $pts) {
+        if ($p[0] -lt 0 -or $p[1] -lt 0 -or $p[0] -ge $Bmp.Width -or $p[1] -ge $Bmp.Height) { continue }
+        $c = $Bmp.GetPixel($p[0], $p[1])
+        if ($null -eq $first) { $first = $c.ToArgb() }
+        elseif ($c.ToArgb() -ne $first) { return $false }
+    }
+    return $true
+}
+
 $result = $form.ShowDialog()
 [MLHooks]::UninstallKeys()
 if ($result -eq [System.Windows.Forms.DialogResult]::OK -and $null -ne $script:selection -and $script:selection.Width -ge 3 -and $script:selection.Height -ge 3) {
-    $crop = $bmp.Clone($script:selection, $bmp.PixelFormat)
-    $crop.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
-    try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
-    $crop.Dispose()
+    $saved = $false
+    if ($script:windowSnap -and $null -ne $script:hoverHwnd -and $script:hoverHwnd -ne [IntPtr]::Zero) {
+        # Window-snap capture: PrintWindow the target so the shot is the
+        # window's own content even when occluded.
+        $gr = $script:windowOuterRect
+        $cr = $script:windowRectAtPoint
+        # PrintWindow paints relative to the window's OUTER frame, so the bitmap
+        # must be sized to GetWindowRect; Chromium windows otherwise shift by the
+        # shadow inset (left blank band, right edge clipped). After capture, crop
+        # to the DWM content rect to drop the shadow halo entirely.
+        $gwrW = $gr.Right - $gr.Left
+        $gwrH = $gr.Bottom - $gr.Top
+        if ($gwrW -gt 0 -and $gwrH -gt 0 -and $null -ne $cr) {
+            $winBmp = Capture-WindowPrint $script:hoverHwnd $gwrW $gwrH
+            if ($null -ne $winBmp -and (Test-BlankBitmap $winBmp)) {
+                # PrintWindow rendered blank (console / some GPU windows don't
+                # implement WM_PRINT): fall back to grabbing the window's own
+                # device context, which still carries its content.
+                $winBmp.Dispose()
+                $winBmp = Capture-WindowBitBlt $script:hoverHwnd $gwrW $gwrH
+            }
+            if ($null -ne $winBmp -and -not (Test-BlankBitmap $winBmp)) {
+                $cbRect = New-Object System.Drawing.Rectangle(($cr.Left - $gr.Left), ($cr.Top - $gr.Top), ($cr.Right - $cr.Left), ($cr.Bottom - $cr.Top))
+                $crop = $winBmp.Clone($cbRect, $winBmp.PixelFormat)
+                $crop.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+                try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
+                $crop.Dispose()
+                $winBmp.Dispose()
+                $saved = $true
+            } elseif ($null -ne $winBmp) {
+                $winBmp.Dispose()
+            }
+            # Both capture paths blank (rare): bail out as cancelled rather than
+            # emit a partially-occluded composite or a full-desktop garbage shot.
+        }
+    } else {
+        # Drag-select path: crop the captured pixels (visible content).
+        $crop = $bmp.Clone($script:selection, $bmp.PixelFormat)
+        $crop.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+        try { [System.Windows.Forms.Clipboard]::SetText($OutPath) } catch { }
+        $crop.Dispose()
+        $saved = $true
+    }
+    if ($saved) {
+        $g.Dispose()
+        $bmp.Dispose()
+        if ($null -ne $script:blurFull) { $script:blurFull.Dispose() }
+        $form.Dispose()
+        exit 0
+    }
+    # Window-snap capture failed (blank/invalid PrintWindow): cancel so the
+    # browser toasts nothing and the user can retry with a drag-select.
     $g.Dispose()
     $bmp.Dispose()
     if ($null -ne $script:blurFull) { $script:blurFull.Dispose() }
     $form.Dispose()
-    exit 0
+    exit 2
 }
 $g.Dispose()
 $bmp.Dispose()

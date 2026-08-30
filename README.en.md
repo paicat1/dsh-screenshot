@@ -28,8 +28,8 @@ Video tutorial (Bilibili): [Using DeepSeek Harness to build a Dsh screenshot plu
 | Browser hotkey (human) | "Here's the screen I want to show you" | Full / region capture; the PNG path is auto-inserted into the DSH input box and copied to the clipboard |
 | `modlens_screenshot` tool (agent) | "Let me look at the screen myself" | Model-invoked: capture + (with modlens present) in-call structured read, returning evidence + the shot path |
 
-| Manual capture demo | Agent self-capture demo |
-|---|---|
+| Manual capture demo | Agent self-capture demo | Window-snap demo |
+|---|---|---|
 | ![Manual capture demo](assets/demo-manual.gif) | ![Agent self-capture demo](assets/demo-agent.gif) | ![Window-snap demo](assets/demo-window-snap.gif) |
 
 ## Why pass the path, not the image?

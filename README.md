@@ -28,8 +28,8 @@ dsh plugin --profile web add @paicat1/dsh-screenshot
 | 浏览器热键（人） | "我想给你看这块屏幕" | 全屏 / 框选；截图后 PNG 路径自动插入 DSH 输入框，并复制到剪贴板 |
 | `modlens_screenshot` 工具（Agent） | "我自己看一下屏幕" | 模型自主调用：截屏 +（modlens 在场时）当场读出结构化内容，返回证据 + 截图路径 |
 
-| 人工操作演示 | Agent 自助调用演示 |
-|---|---|
+| 人工操作演示 | Agent 自助调用演示 | 窗口吸附演示 |
+|---|---|---|
 | ![人工操作演示](assets/demo-manual.gif) | ![Agent 自助调用演示](assets/demo-agent.gif) | ![窗口吸附演示](assets/demo-window-snap.gif) |
 
 ## 为什么传路径，不传图？
